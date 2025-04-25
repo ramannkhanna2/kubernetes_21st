@@ -1,0 +1,185 @@
+🔍 What is CoreDNS?
+CoreDNS is a DNS server written in Go and used by Kubernetes as the default DNS service for service discovery within the cluster.
+
+In simpler terms:
+
+When a pod in Kubernetes wants to talk to another service (like my-service.namespace.svc.cluster.local), it asks CoreDNS to resolve that name into an IP address. CoreDNS then responds with the correct ClusterIP of the service, so the pod can connect.
+
+🧠 Why DNS is Important in Kubernetes?
+In Kubernetes:
+
+Pods are ephemeral (they come and go).
+
+Each Pod has its own IP, but it changes every time it's restarted.
+
+So, instead of using IPs, we use DNS names to talk to services.
+
+Example:
+
+bash
+Copy
+Edit
+curl http://my-service.namespace.svc.cluster.local
+This name is resolved to the service’s ClusterIP using CoreDNS.
+
+📦 Where is CoreDNS Running?
+CoreDNS runs as a Deployment in the kube-system namespace.
+
+It has a ClusterIP Service named kube-dns.
+
+bash
+Copy
+Edit
+kubectl get pods -n kube-system -l k8s-app=kube-dns
+You’ll typically see 2 replicas of CoreDNS pods.
+
+📚 CoreDNS Text-Based Diagram
+Here's a simplified text-based diagram showing how CoreDNS fits in a Kubernetes cluster:
+
+pgsql
+Copy
+Edit
+                        +-----------------------------+
+                        |        Kubernetes Cluster    |
+                        |                             |
+                        |   +---------------------+    |
+                        |   |     CoreDNS Pods    |    |
+                        |   |  (DNS Service)      |    |
+                        |   +----------+----------+    |
+                        |              |               |
+                        |      (DNS Query)             |
+                        |              |               |
+                        |   +----------v----------+    |
+                        |   |   kube-dns Service  |    |
+                        |   |  ClusterIP: 10.X.X.X|    |
+                        |   +----------+----------+    |
+                        |              |               |
+     DNS Lookup         |   +----------v----------+    |
++------------------+    |   |    Kubernetes API   |    |
+|  Pod (nginx)     |----+---> (List Services/Pods)|    |
+|  app=frontend    |    |   +---------------------+    |
++------------------+    |                             |
+                        +-----------------------------+
+
+🔁 What Happens When a Pod Does DNS Lookup?
+Example: nginx pod wants to access my-service
+nginx pod runs a DNS query to resolve my-service.default.svc.cluster.local.
+
+The request goes to CoreDNS via the ClusterIP service kube-dns.
+
+CoreDNS:
+
+Looks up the service using the Kubernetes plugin.
+
+Contacts the Kubernetes API to find the matching ClusterIP.
+
+CoreDNS responds with the IP address.
+
+The pod uses that IP to send traffic.
+
+🔌 CoreDNS Configuration (Corefile)
+CoreDNS is modular and pluggable. Its configuration file is called Corefile, located in the CoreDNS ConfigMap:
+
+bash
+Copy
+Edit
+kubectl -n kube-system edit configmap coredns
+Typical Corefile:
+
+txt
+Copy
+Edit
+.:53 {
+    errors
+    health
+    ready
+    kubernetes cluster.local in-addr.arpa ip6.arpa {
+       pods insecure
+       fallthrough in-addr.arpa ip6.arpa
+    }
+    prometheus :9153
+    forward . /etc/resolv.conf
+    cache 30
+    loop
+    reload
+    loadbalance
+}
+Key Plugins:
+
+Plugin	Purpose
+kubernetes	Connects CoreDNS with Kubernetes API for service discovery
+forward	Forwards unresolved queries to an external DNS server (e.g. Google DNS)
+cache	Caches DNS responses to improve performance
+loop	Detects and breaks DNS loops
+prometheus	Exposes metrics for monitoring CoreDNS
+🔐 How is DNS Configured in Pods?
+When a pod is created:
+
+The pod’s /etc/resolv.conf is configured to point to the kube-dns service IP (e.g. nameserver 10.96.0.10).
+
+txt
+Copy
+Edit
+nameserver 10.96.0.10
+search default.svc.cluster.local svc.cluster.local cluster.local
+options ndots:5
+🧪 Test DNS Inside Cluster
+bash
+Copy
+Edit
+kubectl run -it --rm busybox --image=busybox:1.28 sh
+Inside pod:
+
+bash
+Copy
+Edit
+nslookup kube-dns.kube-system.svc.cluster.local
+Or use dig if the image supports it.
+
+📊 Monitoring CoreDNS
+Use Prometheus to collect metrics:
+
+Metrics exposed at: http://<coredns-pod-ip>:9153/metrics
+
+Useful metrics:
+
+coredns_dns_request_count_total
+
+coredns_cache_hits_total
+
+coredns_kubernetes_dns_stale_total
+
+🔧 Troubleshooting Tips
+Check logs:
+
+bash
+Copy
+Edit
+kubectl logs -n kube-system -l k8s-app=kube-dns
+Check Corefile config:
+
+bash
+Copy
+Edit
+kubectl -n kube-system describe configmap coredns
+Restart CoreDNS:
+
+bash
+Copy
+Edit
+kubectl rollout restart deployment coredns -n kube-system
+Check if CoreDNS pods are Ready:
+
+bash
+Copy
+Edit
+kubectl get pods -n kube-system -l k8s-app=kube-dns
+✅ Summary
+
+Feature	Description
+Purpose	Internal DNS resolver for Kubernetes
+Format	Modular DNS server using plugins
+Default Location	Runs as Deployment in kube-system
+Config File	Corefile via ConfigMap
+Key Plugin	kubernetes, forward, cache
+Communication	Pods send DNS queries to CoreDNS via ClusterIP
