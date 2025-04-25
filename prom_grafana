@@ -1,0 +1,86 @@
+kubectl get pods
+    4  kubectl create namespace monitoring
+    8  snap install helm --classic
+    9  helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+   10  helm repo update
+   11  helm install prometheus prometheus-community/kube-prometheus-stack --namespace monitoring
+   12  kubectl get all -n monitoring
+   13  kubectl get svc -n monitoring
+   14  kubectl edit svc prometheus-grafana -n monitoring (change port from clusterIP to NodePort)
+   15  kubectl replace --force -f /tmp/kubectl-edit-85cjo.yaml
+   18  kubectl get svc -n monitoring
+
+   23  kubectl exec -it prometheus-grafana-6f78c4d997-2nmkl -n monitoring -- /bin/sh -c "echo $(kubectl get secret --namespace monitoring prometheus-grafana -o jsonpath='{.data.admin-user}' | base64 --decode) && echo $(kubectl get secret --namespace monitoring prometheus-grafana -o jsonpath='{.data.admin-password}' | base64 --decode)"
+   24  login to grafana and go to general in search and see monitoriung 
+
+
+username : admin
+password : prom-operator
+
+to expose prometheus pod :
+
+This is required to access prometheus-server using your browser.
+
+318 k get all 319 kubectl edit svc prometheus-grafana 320 k get svc 321 kubectl edit svc prometheus-operated 322 clear 323 k get all 324 kubectl edit svc prometheus-operated
+
+type: NodePort -- remove clusterip :none from spec
+
+328 k replace --force -f /tmp/kubectl-edit-962667183.yaml
+
+
+
+
+settings >> import dashboard : 3662 
+
+
+
+-- more fam dashboards for kubernetes :
+
+https://github.com/dotdc/grafana-dashboards-kubernetes?tab=readme-ov-file#install-via-grafanacom
+
+https://0xdc.me/blog/a-set-of-modern-grafana-dashboards-for-kubernetes/
+ 
+
+
+---- try creating an alert :
+
+add the dashoard for view nodes : 15759 ignore if already added
+
+
+go to dashobards >> Kubernetes / Views / Nodes >> cpu w2 ... >> more >>new alert rule
+
+
+set time range in A section to 5 min 
+
+-- change the prom ql query which tracks % cpu on node 
+
+remove section B and make C s input as B >> click preview to test
+
+keep pending period to 1m
+
+
+we can use this query to convert cpu seconds into % utilization while creatingalert :
+
+100 * (1 - avg(rate(node_cpu_seconds_total{mode="idle", instance="172.31.37.208:9100"}[5m]))) 
+
+
+
+
+
+=================
+
+notification : goto test_grafana teams >> add channel
+
+
+go to test_grafana team >> more apps >> search for incoming webhook ,..
+configure and copy paste the webhook url to grafana and test
+===========
+
+
+now attach rult to notif channel :
+
+-- go to notificationpolicies under alerting :
+
+labels : teams = kube (wtever u like u can write) 
+
+-- now go to alerting >> in 4. Configure labels and notifications >> mention teams=kube and than do preview 
